@@ -19,6 +19,12 @@ MAX_TOOL_RESULT_CHARS = 16_000
 MAX_REQUEST_CHARS = 120_000
 DEFAULT_MAX_TOOLS_PER_TURN = 6
 COMPACT_TOOL_CHARS = 1_200
+# Soft target for newest non-system messages after eviction (atomic tool groups may exceed it).
+MAX_HISTORY_MESSAGES = 24
+
+
+class RequestBudgetError(RuntimeError):
+    """Transcript exceeded the character budget after compaction/eviction."""
 
 
 @dataclass
@@ -114,11 +120,182 @@ class AgentLoop:
         if self.session is not None:
             self.session.write({"type": "compact", "chars": self._message_chars()})
 
+    @staticmethod
+    def _history_groups(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+        """Group assistant tool_calls with their following tool results (atomic units)."""
+        groups: list[list[dict[str, Any]]] = []
+        index = 0
+        while index < len(messages):
+            message = messages[index]
+            tool_calls = message.get("tool_calls")
+            if message.get("role") == "assistant" and isinstance(tool_calls, list) and tool_calls:
+                call_ids = {
+                    call.get("id")
+                    for call in tool_calls
+                    if isinstance(call, dict) and call.get("id")
+                }
+                group = [message]
+                index += 1
+                while index < len(messages) and messages[index].get("role") == "tool":
+                    tool_id = messages[index].get("tool_call_id")
+                    if call_ids and tool_id not in call_ids:
+                        break
+                    group.append(messages[index])
+                    index += 1
+                groups.append(group)
+                continue
+            groups.append([message])
+            index += 1
+        return groups
+
+    def _assert_transcript_invariants(self) -> None:
+        """Fail loudly if tool_call pairing/order is broken before a provider call."""
+        open_ids: set[str] | None = None
+        for index, message in enumerate(self.messages):
+            role = message.get("role")
+            if open_ids is not None and role != "tool":
+                raise RuntimeError(
+                    f"Transcript invariant broken at {index}: expected tool results "
+                    f"for {sorted(open_ids)}"
+                )
+            if role == "assistant" and isinstance(message.get("tool_calls"), list):
+                tool_calls = message["tool_calls"]
+                if tool_calls:
+                    open_ids = {
+                        call.get("id")
+                        for call in tool_calls
+                        if isinstance(call, dict) and call.get("id")
+                    }
+                    if not open_ids:
+                        open_ids = None
+                continue
+            if role == "tool":
+                tool_id = message.get("tool_call_id")
+                if open_ids is None:
+                    raise RuntimeError(
+                        f"Transcript invariant broken at {index}: orphan tool message"
+                    )
+                if tool_id not in open_ids:
+                    raise RuntimeError(
+                        f"Transcript invariant broken at {index}: unexpected tool_call_id"
+                    )
+                open_ids.remove(tool_id)
+                if not open_ids:
+                    open_ids = None
+                continue
+        if open_ids:
+            raise RuntimeError(
+                f"Transcript invariant broken: unanswered tool_call_ids {sorted(open_ids)}"
+            )
+
+    def _backfill_pending_tool_results(self, error: str) -> None:
+        """Insert missing tool messages immediately after each open assistant group."""
+        content = self._truncate({"error": error})
+        rebuilt: list[dict[str, Any]] = []
+        for group in self._history_groups(self.messages):
+            rebuilt.extend(group)
+            head = group[0]
+            tool_calls = head.get("tool_calls")
+            if head.get("role") != "assistant" or not isinstance(tool_calls, list) or not tool_calls:
+                continue
+            answered = {
+                message.get("tool_call_id")
+                for message in group[1:]
+                if message.get("role") == "tool"
+            }
+            for call in tool_calls:
+                if not isinstance(call, dict):
+                    continue
+                call_id = call.get("id")
+                if not call_id or call_id in answered:
+                    continue
+                rebuilt.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": content,
+                    }
+                )
+        self.messages = rebuilt
+
+    def _safe_backfill_pending_tool_results(self, error: str) -> None:
+        """Best-effort transcript repair; never raise out of recovery handlers."""
+        try:
+            self._backfill_pending_tool_results(error)
+            self._assert_transcript_invariants()
+            return
+        except Exception:
+            pass
+        # Last resort: drop trailing incomplete assistant/tool tail.
+        try:
+            while self.messages:
+                last = self.messages[-1]
+                if last.get("role") == "tool":
+                    self.messages.pop()
+                    continue
+                if last.get("role") == "assistant" and last.get("tool_calls"):
+                    self.messages.pop()
+                    continue
+                break
+            self._assert_transcript_invariants()
+        except Exception:
+            pass
+
+    def _evict_old_messages(self) -> None:
+        """Drop oldest non-system turn groups until the transcript fits a soft budget."""
+        target = int(MAX_REQUEST_CHARS * 0.75)
+        if self._message_chars() <= target:
+            return
+        system = [message for message in self.messages if message.get("role") == "system"]
+        rest = [message for message in self.messages if message.get("role") != "system"]
+        floor = max(4, MAX_HISTORY_MESSAGES // 2)
+        groups = self._history_groups(rest)
+        pinned: list[list[dict[str, Any]]] = []
+        # Keep the first user message so wrap-up still sees the initiating question.
+        if groups and groups[0] and groups[0][0].get("role") == "user":
+            pinned.append(groups.pop(0))
+
+        def flatten(items: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+            return [message for group in items for message in group]
+
+        def sized(messages: list[dict[str, Any]]) -> int:
+            return len(json.dumps(messages, ensure_ascii=False))
+
+        dropped_roles: list[str] = []
+        while (
+            len(groups) > 1
+            and len(flatten(pinned + groups)) > floor
+            and sized(system + flatten(pinned + groups)) > target
+        ):
+            dropped = groups.pop(0)
+            dropped_roles.extend(str(message.get("role")) for message in dropped)
+        while len(groups) > 1 and len(flatten(pinned + groups)) > MAX_HISTORY_MESSAGES:
+            if len(flatten(pinned + groups[1:])) < floor:
+                break
+            dropped = groups.pop(0)
+            dropped_roles.extend(str(message.get("role")) for message in dropped)
+        rest = flatten(pinned + groups)
+        self.messages = system + rest
+        self._assert_transcript_invariants()
+        if self.session is not None:
+            self.session.write(
+                {
+                    "type": "history_evicted",
+                    "chars": self._message_chars(),
+                    "kept": len(rest),
+                    "dropped_roles": dropped_roles[:40],
+                }
+            )
+
     def _ensure_request_budget(self) -> None:
         self._compact_messages()
         if self._message_chars() > MAX_REQUEST_CHARS:
-            raise RuntimeError(
-                f"Conversation exceeds the {MAX_REQUEST_CHARS} character request budget"
+            self._evict_old_messages()
+            self._compact_messages()
+        if self._message_chars() > MAX_REQUEST_CHARS:
+            raise RequestBudgetError(
+                f"Conversation exceeds the {MAX_REQUEST_CHARS} character request budget. "
+                "Run /clear in the REPL (or start a new one-shot) and try a narrower question."
             )
 
     def _tool_definitions(self, *, allow_tools: bool) -> list[dict[str, Any]]:
@@ -215,22 +392,23 @@ class AgentLoop:
     def _wrap_up(self, *, status: str = "done") -> RunResult:
         """One answer-only completion that does not consume the step budget."""
         self._compact_messages()
-        self.messages.append(
-            {
-                "role": "user",
-                "content": (
-                    "Tools are disabled for this final turn. Using only evidence already "
-                    "gathered, write the complete answer now (findings, strengths, risks, "
-                    "and concrete next steps). Do not request tools."
-                ),
-            }
-        )
+        self._evict_old_messages()
+        nudge = {
+            "role": "user",
+            "content": (
+                "Tools are disabled for this final turn. Using only evidence already "
+                "gathered, write the complete answer now (findings, strengths, risks, "
+                "and concrete next steps). Do not request tools."
+            ),
+        }
         self._reset_system()
         self._ensure_request_budget()
+        self._assert_transcript_invariants()
         self.progress("wrap-up (answer only)")
         if self.session is not None:
             self.session.write({"type": "wrap_up", "status": status})
-        response = self.provider.complete(self.messages, [])
+        # Do not leave the synthetic nudge in REPL history.
+        response = self.provider.complete([*self.messages, nudge], [])
         if response.tool_calls and not response.content:
             return self._finalize_content(
                 "Could not obtain a final narrative after the tool phase. "
@@ -258,6 +436,7 @@ class AgentLoop:
                 self.budget.consume_step()
                 self._reset_system()
                 self._ensure_request_budget()
+                self._assert_transcript_invariants()
                 if self.session is not None:
                     self.session.write(
                         {
@@ -277,13 +456,12 @@ class AgentLoop:
                 calls = response.tool_calls or []
                 if calls:
                     if not tools:
-                        return self._finalize_content(
-                            response.content
-                            or "Turn budget reached before more tools could run. "
-                            "Ask a follow-up to continue, or raise AIE_MAX_STEPS.",
-                            status="blocked",
-                        )
+                        # Answer-only / tool-budget empty: still produce a real wrap-up.
+                        if response.content:
+                            return self._finalize_content(response.content, status="blocked")
+                        return self._wrap_up(status="blocked")
                     self._execute_tools(calls)
+                    self._assert_transcript_invariants()
                     self._compact_messages()
                     if self.budget.steps_remaining <= 0:
                         return self._wrap_up(status="done")
@@ -295,14 +473,41 @@ class AgentLoop:
                 if response.content is None:
                     raise RuntimeError("Provider returned neither content nor tool calls")
                 return self._finalize_content(response.content, status="done")
-        except RuntimeError as error:
-            if "request budget" in str(error).lower():
-                try:
-                    self._compact_messages()
-                    return self._wrap_up(status="blocked")
-                except RuntimeError:
-                    pass
-            status = "blocked" if "budget" in str(error).lower() else "failed"
+        except KeyboardInterrupt:
+            self._safe_backfill_pending_tool_results("Interrupted before the tool completed.")
+            answer = (
+                "Interrupted. The turn stopped early and the transcript was repaired so you "
+                "can continue, or run /clear."
+            )
             if self.session is not None:
-                self.session.write({"type": "completed", "status": status, "error": True})
-            return RunResult(answer=str(error), status=status, budget=self.budget.snapshot())
+                self.session.write({"type": "completed", "status": "blocked", "error": True})
+            self.messages.append({"role": "assistant", "content": answer})
+            return RunResult(answer=answer, status="blocked", budget=self.budget.snapshot())
+        except RequestBudgetError as error:
+            try:
+                self._compact_messages()
+                self._evict_old_messages()
+                return self._wrap_up(status="blocked")
+            except Exception as wrap_error:
+                if self.session is not None:
+                    self.session.write(
+                        {
+                            "type": "wrap_up_failed",
+                            "error": str(wrap_error),
+                        }
+                    )
+            answer = str(error)
+            if "/clear" not in answer:
+                answer += " Run /clear in the REPL, then retry."
+            self._safe_backfill_pending_tool_results(answer)
+            if self.session is not None:
+                self.session.write({"type": "completed", "status": "blocked", "error": True})
+            if not self.messages or self.messages[-1].get("role") != "assistant":
+                self.messages.append({"role": "assistant", "content": answer})
+            return RunResult(answer=answer, status="blocked", budget=self.budget.snapshot())
+        except Exception as error:
+            self._safe_backfill_pending_tool_results(f"Turn failed: {error}")
+            answer = f"Provider or tool failure: {error}"
+            if self.session is not None:
+                self.session.write({"type": "completed", "status": "failed", "error": True})
+            return RunResult(answer=answer, status="failed", budget=self.budget.snapshot())

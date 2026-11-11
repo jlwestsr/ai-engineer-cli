@@ -24,13 +24,19 @@ When a grant is off, the harness omits gated tools from the tool list. Handlers 
 ## Path and content limits
 
 - Paths must stay inside the workspace.
-- Symlinks are rejected.
-- Hidden/generated/credential-like names are excluded from discovery and reads.
+- Symlinks are rejected at walk time; file reads use `O_NOFOLLOW` so a planted final-component symlink cannot race past the check.
+- Hidden/generated/credential-like names are excluded from discovery, reads, and filtered git status/diff paths.
 - File size, line window, search hits, and tool output length are capped.
 
 ## Subprocess environment scrub
 
-Before git or pytest starts, `scrub_subprocess_env` removes environment variables whose names contain markers such as `API_KEY`, `TOKEN`, `SECRET`, or `PASSWORD`. That includes `OPENROUTER_API_KEY` and `AIE_API_KEY`.
+Before git or pytest starts, `scrub_subprocess_env` (shared policy in `envpolicy.py`) removes:
+
+- Credential-shaped names (`API_KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `KEY_ID`, `CREDENTIAL`, `AUTHORIZATION`, `SESSION_*`, `*_KEY*`)
+- Process-control variables (`PYTHONPATH`, `LD_PRELOAD`, `NODE_OPTIONS`, `JAVA_TOOL_OPTIONS`, and related)
+- `GIT_*`, `PIP_*`, and `UV_*` prefixes, then sets `GIT_TERMINAL_PROMPT=0`
+
+The `.env` loader uses the same policy and also refuses to inject `PATH`.
 
 Scrubbing does not redact tool output. A test that prints its own environment can still leak values into the chat transcript.
 

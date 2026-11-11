@@ -13,7 +13,7 @@ user message
     → repeat until text answer, answer-only last step, or wrap-up
 ```
 
-The last budgeted turn withholds tools so the model must answer. If steps are already spent after tools, a free wrap-up completion still requests a text answer.
+The last budgeted turn withholds tools so the model must answer. If steps or the tool-call budget are already spent and the model still requests tools, a free wrap-up completion still requests a text answer.
 
 ## Package map
 
@@ -44,4 +44,4 @@ Git and pytest run through `_command` with a fixed argv (no shell). The child en
 
 ## Compaction
 
-When the serialized transcript exceeds the request character budget, older large tool payloads shrink to short previews so wrap-up can still run.
+When the serialized transcript exceeds the request character budget, older large tool payloads shrink to short previews. If that is not enough, oldest non-system messages are evicted (system prompt plus a recent floor stay). When the hard budget still fails, the error tells the operator to run `/clear`.

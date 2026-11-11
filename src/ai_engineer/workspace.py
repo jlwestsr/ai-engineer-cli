@@ -48,18 +48,16 @@ ALLOWED_HIDDEN_NAMES = {
     ".env.example",
 }
 SECRET_PATTERNS = (".env*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*")
-_ENV_SECRET_MARKERS = ("API_KEY", "API_TOKEN", "ACCESS_TOKEN", "TOKEN", "SECRET", "PASSWORD")
 
 
 def scrub_subprocess_env(environment: dict[str, str]) -> dict[str, str]:
-    """Drop credential-like variables from a child-process environment copy."""
+    """Drop credential-like and process-control variables from a child-process env copy."""
+    from ai_engineer.envpolicy import is_denied_env_key
+
     cleaned = dict(environment)
-    for name in [
-        key
-        for key in cleaned
-        if any(marker in key.upper() for marker in _ENV_SECRET_MARKERS)
-    ]:
-        cleaned.pop(name, None)
+    for name in list(cleaned):
+        if is_denied_env_key(name, for_envfile=False):
+            cleaned.pop(name, None)
     cleaned["GIT_TERMINAL_PROMPT"] = "0"
     return cleaned
 
@@ -146,8 +144,16 @@ class WorkspaceTools:
         path = self._path(relative)
         if not path.is_file():
             raise ValueError("Path must identify an existing regular file")
-        with path.open("rb") as source:
-            data = source.read(MAX_FILE_BYTES + 1)
+        try:
+            # O_NOFOLLOW rejects a final-component symlink planted after _path().
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError as error:
+            raise ValueError("Path must identify an existing regular file") from error
+        try:
+            with os.fdopen(descriptor, "rb") as source:
+                data = source.read(MAX_FILE_BYTES + 1)
+        except OSError as error:
+            raise ValueError("Path must identify an existing regular file") from error
         if len(data) > MAX_FILE_BYTES:
             raise ValueError("File exceeds the 256 KiB tool limit")
         if b"\0" in data:
@@ -516,8 +522,81 @@ class WorkspaceTools:
             ]
         )
 
+    def _git_workspace_prefix(self) -> str:
+        """Prefix to strip from porcelain paths (always repo-root relative)."""
+        listing = self._git_command(["rev-parse", "--show-toplevel"])
+        if listing["exit_code"] != 0 or listing.get("timed_out") or listing.get("truncated"):
+            return ""
+        top = Path(listing["output"].strip()).resolve()
+        try:
+            relative = self.root.relative_to(top)
+        except ValueError:
+            return ""
+        if relative == Path("."):
+            return ""
+        return relative.as_posix().rstrip("/") + "/"
+
+    def _workspace_git_path(self, repo_relative: str, *, prefix: str) -> str | None:
+        """Map a repo-root porcelain path into a workspace-relative path, or None if out of scope."""
+        name = repo_relative
+        if prefix:
+            if not name.startswith(prefix):
+                return None
+            name = name[len(prefix) :]
+        try:
+            self._path(name)
+        except ValueError:
+            return None
+        return name
+
     def git_status(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        return self._git_command(["status", "--short", "--untracked-files=normal", "--", "."])
+        # Porcelain paths are always relative to the repository root (not cwd).
+        listing = self._git_command(
+            ["status", "--porcelain", "-z", "--untracked-files=normal", "--", "."]
+        )
+        if listing["exit_code"] != 0 or listing.get("timed_out"):
+            return listing
+        if listing["truncated"]:
+            raise ValueError("Git status output exceeded the tool output budget")
+        prefix = self._git_workspace_prefix()
+        lines: list[str] = []
+        entries = listing["output"].split("\0")
+        index = 0
+        while index < len(entries):
+            entry = entries[index]
+            index += 1
+            if not entry:
+                continue
+            # Porcelain -z: "XY path" (space after XY). Renames: next NUL record is the new path.
+            if len(entry) < 3 or entry[2:3] != " ":
+                continue
+            status = entry[:2]
+            path_text = entry[3:]
+            repo_paths = [path_text]
+            if status[0] in {"R", "C"} or status[1] in {"R", "C"}:
+                if index < len(entries) and entries[index]:
+                    repo_paths.append(entries[index])
+                    index += 1
+            mapped: list[str] = []
+            for name in repo_paths:
+                workspace_name = self._workspace_git_path(name, prefix=prefix)
+                if workspace_name is None:
+                    mapped = []
+                    break
+                mapped.append(workspace_name)
+            if not mapped:
+                continue
+            if len(mapped) == 1:
+                lines.append(f"{status} {mapped[0]}")
+            else:
+                lines.append(f"{status} {mapped[0]} -> {mapped[1]}")
+        return {
+            "exit_code": 0,
+            "timed_out": False,
+            "truncated": False,
+            "output": "\n".join(lines),
+            "filtered": True,
+        }
 
     def git_diff(self, arguments: dict[str, Any]) -> dict[str, Any]:
         options = [
@@ -590,7 +669,13 @@ class WorkspaceTools:
             _, current_data, _ = self._text(arguments["path"])
             if current_data != data:
                 raise ValueError("File changed during editing; read it again")
-            os.replace(temporary, path)
+            # Re-walk immediately before rename to shrink the symlink TOCTOU window.
+            verified = self._path(arguments["path"])
+            if verified != path or path.is_symlink():
+                raise ValueError("Path changed during editing; read it again")
+            if not verified.resolve().is_relative_to(self.root):
+                raise ValueError("Path escapes the workspace")
+            os.replace(temporary, verified)
         finally:
             Path(temporary).unlink(missing_ok=True)
         return {

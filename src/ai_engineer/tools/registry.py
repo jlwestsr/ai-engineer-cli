@@ -94,5 +94,5 @@ class ToolRegistry:
             schema = self._tools[name][0]["function"]["parameters"]
             self._validate_value(arguments, schema, "arguments")
             return self._tools[name][1](arguments)
-        except (ValueError, ZeroDivisionError, OverflowError, OSError, PermissionError) as error:
+        except Exception as error:  # noqa: BLE001 — tool failures must not abort the turn
             return {"error": str(error)}

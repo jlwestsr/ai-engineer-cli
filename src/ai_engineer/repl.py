@@ -18,6 +18,8 @@ HELP_TEXT = """\
   /plan              Show the current task plan
   /allow edits       Enable edit_file and create_file
   /allow tests       Enable run_python_tests
+  /deny edits        Disable edit tools
+  /deny tests        Disable test tool
   /clear             Clear conversation history (keeps permissions)
   /workspace         Show workspace root
   /quit              Exit the REPL
@@ -64,7 +66,14 @@ def run_repl(
             max_steps=loop.budget.max_steps,
             max_tool_calls=loop.budget.max_tool_calls,
         )
-        result = loop.run_turn(line)
+        try:
+            result = loop.run_turn(line)
+        except KeyboardInterrupt:
+            console.print(
+                "\n[yellow]interrupted[/yellow] — tools stopped. "
+                "Continue, or run /clear."
+            )
+            continue
         if result.status == "done":
             out.print(Markdown(result.answer))
         else:
@@ -141,6 +150,22 @@ def _handle_slash(
             console.print("[green]tests enabled[/green]")
         else:
             console.print("Usage: /allow edits | /allow tests")
+        return False
+    if command == "/deny":
+        if len(parts) < 2:
+            console.print("Usage: /deny edits | /deny tests")
+            return False
+        target = parts[1].lower()
+        if target == "edits":
+            tools.set_permissions(allow_edits=False)
+            loop.refresh_tools()
+            console.print("[yellow]edits disabled[/yellow]")
+        elif target == "tests":
+            tools.set_permissions(allow_tests=False)
+            loop.refresh_tools()
+            console.print("[yellow]tests disabled[/yellow]")
+        else:
+            console.print("Usage: /deny edits | /deny tests")
         return False
     console.print(f"Unknown command: {command}. Try /help.")
     return False

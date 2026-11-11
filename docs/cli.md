@@ -83,6 +83,8 @@ There is no arbitrary shell, package install, delete, commit, push, or deploy to
 | `/plan` | Show task plan |
 | `/allow edits` | Enable edit tools |
 | `/allow tests` | Enable pytest tool |
+| `/deny edits` | Disable edit tools |
+| `/deny tests` | Disable pytest tool |
 | `/clear` | Clear conversation history and plan (`/reset` alias) |
 | `/workspace` | Print workspace root |
 | `/quit` | Exit |
