@@ -88,6 +88,8 @@ def test_scrub_subprocess_env_drops_openrouter_key() -> None:
 
 
 def test_run_python_tests_invokes_pytest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
     tools = WorkspaceTools(tmp_path, allow_tests=True)
     captured: dict[str, Any] = {}
 
@@ -97,6 +99,28 @@ def test_run_python_tests_invokes_pytest(tmp_path: Path, monkeypatch: pytest.Mon
 
     monkeypatch.setattr(tools, "_command", fake_command)
     result = tools.run_python_tests({})
-    assert captured["command"][:4] == ["python", "-B", "-m", "pytest"]
+    assert captured["command"][:4] == [sys.executable, "-B", "-m", "pytest"]
     assert "-q" in captured["command"]
     assert result["exit_code"] == 0
+
+
+def test_read_file_marks_char_truncation(tmp_path: Path) -> None:
+    from ai_engineer.workspace import MAX_OUTPUT_CHARS
+
+    line = "x" * 200
+    (tmp_path / "wide.txt").write_text("\n".join([line] * 120) + "\n", encoding="utf-8")
+    tools = WorkspaceTools(tmp_path)
+    result = tools.read_file({"path": "wide.txt", "start_line": 1, "end_line": 120})
+    assert result["truncated"] is True
+    assert len(result["content"]) <= MAX_OUTPUT_CHARS
+
+
+def test_env_example_is_readable(tmp_path: Path) -> None:
+    (tmp_path / ".env.example").write_text("AIE_MODEL=demo\n", encoding="utf-8")
+    (tmp_path / ".env").write_text("OPENROUTER_API_KEY=secret\n", encoding="utf-8")
+    tools = WorkspaceTools(tmp_path)
+    listed = tools.list_files({})
+    assert ".env.example" in listed["files"]
+    assert ".env" not in listed["files"]
+    read = tools.read_file({"path": ".env.example"})
+    assert "AIE_MODEL=demo" in read["content"]

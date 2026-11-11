@@ -1,0 +1,22 @@
+# AI Engineer CLI (`aie`)
+
+> Local harness CLI: the model selects tools; the harness owns permissions, budgets, and metadata sessions.
+
+Install: `uv sync --all-extras` then `uv run aie`.
+Python: 3.12+.
+Default offline provider: `mock`. Live: `openrouter` or `openai`.
+Human owns git commit and push. No arbitrary shell tool.
+
+## Docs
+
+- [Quickstart](quickstart.md): install, mock smoke, OpenRouter, watching stderr
+- [CLI reference](cli.md): flags, env vars, tools, REPL, exit codes, sub-agent use
+- [Architecture](architecture.md): control loop and package map
+- [Security](security.md): trust model, permissions, env scrub, limits
+- [Terminology](terminology.md): approved terms
+
+## Optional
+
+- [Root README](../README.md): short project overview
+- [AGENTS.md](../AGENTS.md): instructions loaded into the model system prompt
+- [`.env.example`](../.env.example): provider and budget variables

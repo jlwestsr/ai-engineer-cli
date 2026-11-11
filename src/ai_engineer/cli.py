@@ -32,7 +32,13 @@ def _env_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
-    return int(raw)
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from error
+    if value < 1:
+        raise ValueError(f"{name} must be at least 1, got {value}")
+    return value
 
 
 def build_runtime(
@@ -131,17 +137,24 @@ def main(
     ):
         load_env_file(Path.home() / ".hermes" / ".env")
 
-    steps = max_steps if max_steps is not None else _env_int("AIE_MAX_STEPS", 5)
-    tool_budget = (
-        max_tool_calls if max_tool_calls is not None else _env_int("AIE_MAX_TOOL_CALLS", 10)
-    )
-    tools_per_turn = (
-        max_tools_per_turn
-        if max_tools_per_turn is not None
-        else _env_int("AIE_MAX_TOOLS_PER_TURN", 6)
-    )
-
     try:
+        steps = max_steps if max_steps is not None else _env_int("AIE_MAX_STEPS", 5)
+        tool_budget = (
+            max_tool_calls
+            if max_tool_calls is not None
+            else _env_int("AIE_MAX_TOOL_CALLS", 10)
+        )
+        tools_per_turn = (
+            max_tools_per_turn
+            if max_tools_per_turn is not None
+            else _env_int("AIE_MAX_TOOLS_PER_TURN", 6)
+        )
+        if max_steps is not None and max_steps < 1:
+            raise ValueError("--max-steps must be at least 1")
+        if max_tool_calls is not None and max_tool_calls < 1:
+            raise ValueError("--max-tool-calls must be at least 1")
+        if max_tools_per_turn is not None and max_tools_per_turn < 1:
+            raise ValueError("--max-tools-per-turn must be at least 1")
         loop, tools, store = build_runtime(
             workspace,
             provider_name=provider,

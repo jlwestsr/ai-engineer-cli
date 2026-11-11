@@ -9,6 +9,7 @@ import os
 import selectors
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -43,6 +44,7 @@ ALLOWED_HIDDEN_NAMES = {
     ".coveragerc",
     ".flake8",
     ".dockerignore",
+    ".env.example",
 }
 SECRET_PATTERNS = (".env*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*")
 _ENV_SECRET_MARKERS = ("API_KEY", "API_TOKEN", "ACCESS_TOKEN", "TOKEN", "SECRET", "PASSWORD")
@@ -99,7 +101,10 @@ class WorkspaceTools:
         return any(
             part in EXCLUDED_DIRECTORIES
             or (part.startswith(".") and part not in ALLOWED_HIDDEN_NAMES)
-            or any(fnmatch.fnmatch(part.lower(), pattern) for pattern in SECRET_PATTERNS)
+            or (
+                part not in ALLOWED_HIDDEN_NAMES
+                and any(fnmatch.fnmatch(part.lower(), pattern) for pattern in SECRET_PATTERNS)
+            )
             for part in parts
         )
 
@@ -322,12 +327,13 @@ class WorkspaceTools:
             for number, line in enumerate(lines, 1)
             if start <= number <= end
         )
+        char_truncated = len(content) > MAX_OUTPUT_CHARS
         return {
             "path": path.relative_to(self.root).as_posix(),
             "sha256": hashlib.sha256(data).hexdigest(),
             "total_lines": len(lines),
             "content": content[:MAX_OUTPUT_CHARS],
-            "truncated": end < len(lines) or len(content) > MAX_OUTPUT_CHARS,
+            "truncated": end < len(lines) or char_truncated,
         }
 
     def search_text(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -441,13 +447,18 @@ class WorkspaceTools:
             except BaseException:
                 self._terminate(process)
                 raise
-        return {
+        result: dict[str, Any] = {
             "command": command,
             "exit_code": process.returncode,
             "timed_out": timed_out,
             "output": output.decode("utf-8", errors="replace"),
             "truncated": output_bytes > len(output) or timed_out,
         }
+        if timed_out:
+            result["error"] = "Command timed out"
+        elif process.returncode not in (0, None):
+            result["error"] = f"Command exited with code {process.returncode}"
+        return result
 
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:
@@ -571,7 +582,7 @@ class WorkspaceTools:
         if not self.allow_tests:
             raise PermissionError("Repository tests require --allow-tests")
         result = self._command(
-            ["python", "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+            [sys.executable, "-B", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
         )
         if result.get("exit_code") and "No module named pytest" in result.get("output", ""):
             result = dict(result)

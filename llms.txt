@@ -1,0 +1,9 @@
+# AI Engineer CLI (`aie`)
+
+> Terminal harness: model selects tools; harness owns permissions, budgets, and metadata sessions.
+
+- Install: `uv sync --all-extras` then `uv run aie`
+- Docs index: [docs/llms.txt](docs/llms.txt)
+- Quickstart: [docs/quickstart.md](docs/quickstart.md)
+- CLI reference: [docs/cli.md](docs/cli.md)
+- Security: [docs/security.md](docs/security.md)

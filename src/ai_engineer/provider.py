@@ -117,14 +117,14 @@ class OpenAICompatibleProvider:
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> ModelResponse:
-        payload = json.dumps(
-            {
-                "model": self.model,
-                "messages": messages,
-                "tools": tools,
-                "tool_choice": "auto",
-            }
-        ).encode()
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+        }
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
+        payload = json.dumps(body).encode()
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
