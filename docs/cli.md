@@ -83,10 +83,11 @@ There is no arbitrary shell, package install, delete, commit, push, or deploy to
 | `/plan` | Show task plan |
 | `/allow edits` | Enable edit tools |
 | `/allow tests` | Enable pytest tool |
+| `/clear` | Clear conversation history and plan (`/reset` alias) |
 | `/workspace` | Print workspace root |
 | `/quit` | Exit |
 
-Each user message resets the turn/tool budgets. Conversation history stays in memory for that REPL process.
+Each user message resets the turn/tool budgets. Conversation history stays in memory for that REPL process until `/clear`.
 
 ## Budgets and wrap-up
 

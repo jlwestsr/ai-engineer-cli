@@ -37,20 +37,34 @@ class MockProvider:
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> ModelResponse:
-        if messages[-1]["role"] == "tool":
-            result = json.loads(messages[-1]["content"])
+        if not messages:
+            return ModelResponse("Mock mode received an empty transcript.")
+        latest = messages[-1]
+        if latest.get("role") == "tool":
+            raw = latest.get("content", "")
+            try:
+                result = json.loads(raw) if isinstance(raw, str) else raw
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return ModelResponse("The tool returned a non-JSON or compacted payload.")
             if isinstance(result, dict) and "error" in result:
                 return ModelResponse(f"The tool reported an error: {result['error']}")
-            if messages[-1]["tool_call_id"] == "mock-time":
+            tool_call_id = latest.get("tool_call_id", "")
+            if tool_call_id == "mock-time":
                 return ModelResponse(f"The current local time is {result}.")
-            if messages[-1]["tool_call_id"].startswith("mock-engineering"):
+            if isinstance(tool_call_id, str) and tool_call_id.startswith("mock-engineering"):
                 return ModelResponse(json.dumps(result, indent=2, ensure_ascii=False))
             return ModelResponse(f"The result is {result}.")
 
         available = {tool["function"]["name"] for tool in tools}
-        prompt = next(
-            message["content"] for message in reversed(messages) if message["role"] == "user"
-        )
+        prompt = ""
+        for message in reversed(messages):
+            if message.get("role") == "user" and isinstance(message.get("content"), str):
+                prompt = message["content"]
+                break
+        if not prompt:
+            return ModelResponse(
+                "Mock mode needs a user message. Try 'list files' or 'read AGENTS.md'."
+            )
         engineering: tuple[str, dict[str, Any]] | None = None
         lowered = prompt.lower().strip()
         if lowered == "list files":

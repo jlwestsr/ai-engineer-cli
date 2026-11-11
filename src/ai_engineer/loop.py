@@ -69,6 +69,14 @@ class AgentLoop:
         self.workspace.refresh_registry(self.registry)
         self._reset_system()
 
+    def clear_history(self) -> None:
+        """Drop conversation history and rebuild the system prompt."""
+        self.messages = []
+        self._skills = load_skill_snippets(self.workspace.root)
+        self._reset_system()
+        if self.session is not None:
+            self.session.write({"type": "history_cleared"})
+
     def _truncate(self, payload: Any) -> str:
         text = json.dumps(payload, ensure_ascii=False)
         if len(text) <= MAX_TOOL_RESULT_CHARS:

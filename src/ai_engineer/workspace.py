@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 MAX_FILE_BYTES = 256 * 1024
 MAX_OUTPUT_CHARS = 16_000
 MAX_SCAN_FILES = 5_000
+SEARCH_MAX_SECONDS = 15.0
 EXCLUDED_DIRECTORIES = {
     ".git",
     ".hg",
@@ -306,10 +307,16 @@ class WorkspaceTools:
             if fnmatch.fnmatch(relative, arguments.get("pattern", "*")):
                 paths.append(relative)
                 if len(paths) >= limit:
-                    return {"files": paths, "incomplete": True, "scan_limit": MAX_SCAN_FILES}
+                    return {
+                        "files": paths,
+                        "limit_reached": True,
+                        "scan_truncated": self._scan_truncated,
+                        "scan_limit": MAX_SCAN_FILES,
+                    }
         return {
             "files": paths,
-            "incomplete": self._scan_truncated,
+            "limit_reached": False,
+            "scan_truncated": self._scan_truncated,
             "scan_limit": MAX_SCAN_FILES,
         }
 
@@ -346,7 +353,12 @@ class WorkspaceTools:
             needle = needle.casefold()
         matches: list[dict[str, Any]] = []
         skipped = 0
+        timed_out = False
+        started = time.monotonic()
         for path in self._files():
+            if time.monotonic() - started >= SEARCH_MAX_SECONDS:
+                timed_out = True
+                break
             relative = path.relative_to(self.root).as_posix()
             if not fnmatch.fnmatch(relative, arguments.get("pattern", "*")):
                 continue
@@ -360,12 +372,23 @@ class WorkspaceTools:
                 if needle in haystack:
                     matches.append({"path": relative, "line": number, "text": line[:500]})
                     if len(matches) >= limit:
-                        return {"matches": matches, "incomplete": True, "skipped": skipped}
+                        return {
+                            "matches": matches,
+                            "limit_reached": True,
+                            "scan_truncated": self._scan_truncated,
+                            "timed_out": False,
+                            "skipped": skipped,
+                            "scan_limit": MAX_SCAN_FILES,
+                            "time_limit_seconds": SEARCH_MAX_SECONDS,
+                        }
         return {
             "matches": matches,
-            "incomplete": self._scan_truncated,
+            "limit_reached": False,
+            "scan_truncated": self._scan_truncated,
+            "timed_out": timed_out,
             "skipped": skipped,
             "scan_limit": MAX_SCAN_FILES,
+            "time_limit_seconds": SEARCH_MAX_SECONDS,
         }
 
     def python_symbols(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -462,6 +485,17 @@ class WorkspaceTools:
 
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:
+        """Ask the process group to exit, then force-kill if it stays up."""
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            process.wait()
+            return
+        try:
+            process.wait(timeout=2)
+            return
+        except subprocess.TimeoutExpired:
+            pass
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:

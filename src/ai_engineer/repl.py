@@ -18,6 +18,7 @@ HELP_TEXT = """\
   /plan              Show the current task plan
   /allow edits       Enable edit_file and create_file
   /allow tests       Enable run_python_tests
+  /clear             Clear conversation history (keeps permissions)
   /workspace         Show workspace root
   /quit              Exit the REPL
 
@@ -89,6 +90,15 @@ def _handle_slash(
         return False
     if command == "/workspace":
         console.print(str(tools.root))
+        return False
+    if command in {"/clear", "/reset"}:
+        loop.clear_history()
+        tools.update_plan({"steps": []})
+        loop.budget = Budget(
+            max_steps=loop.budget.max_steps,
+            max_tool_calls=loop.budget.max_tool_calls,
+        )
+        console.print("[green]conversation cleared[/green]")
         return False
     if command == "/status":
         table = Table(title="Status")

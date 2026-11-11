@@ -8,7 +8,7 @@
 |-------|-------|
 | Human operator | Chooses workspace, grants edits/tests, owns git commit/push |
 | Model | Untrusted; may only call registered tools |
-| Workspace files / `AGENTS.md` / `.aie/skills` | Untrusted text spliced into the system prompt — can steer the model |
+| Workspace files / `AGENTS.md` / `.aie/skills` | Untrusted text spliced into the system prompt — can steer the model. Skill files load only via symlink-safe reads under `.aie/skills/<name>/SKILL.md` |
 | Pytest under `--allow-tests` | Executes repository code with the operator's OS user |
 
 Do not point `aie` at an untrusted tree with `--allow-edits` or `--allow-tests`.
