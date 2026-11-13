@@ -22,10 +22,12 @@ class BatchyProvider:
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> ModelResponse:
         self.calls += 1
-        if messages[-1]["role"] == "tool" or any(m.get("role") == "tool" for m in messages[-5:]):
-            # After any tool round, finish.
-            if self.calls >= 2:
-                return ModelResponse("Reviewed with capped tools.")
+        tool_round = messages[-1]["role"] == "tool" or any(
+            m.get("role") == "tool" for m in messages[-5:]
+        )
+        # After any tool round, finish.
+        if tool_round and self.calls >= 2:
+            return ModelResponse("Reviewed with capped tools.")
         return ModelResponse(tool_calls=[ToolCall(f"id-{i}", "list_files", {}) for i in range(10)])
 
 

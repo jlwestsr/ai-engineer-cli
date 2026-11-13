@@ -39,3 +39,7 @@ package = true
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer declares CLI parameters via call defaults; that is the supported pattern.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]

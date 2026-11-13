@@ -22,15 +22,7 @@ def test_load_env_file(tmp_path: Path, monkeypatch) -> None:
 def test_load_env_file_skips_control_keys(tmp_path: Path, monkeypatch) -> None:
     path = tmp_path / ".env"
     path.write_text(
-        "\n".join(
-            [
-                "AIE_MODEL=ok",
-                "PYTHONPATH=/evil",
-                "LD_PRELOAD=/evil.so",
-                "GIT_SSH_COMMAND=ssh -i /evil",
-                "PATH=/evil/bin",
-            ]
-        )
+        "AIE_MODEL=ok\nPYTHONPATH=/evil\nLD_PRELOAD=/evil.so\nGIT_SSH_COMMAND=ssh -i /evil\nPATH=/evil/bin"
         + "\n",
         encoding="utf-8",
     )
@@ -52,14 +44,7 @@ def test_load_env_file_skips_loader_opts_but_keeps_provider_keys(
 ) -> None:
     path = tmp_path / ".env"
     path.write_text(
-        "\n".join(
-            [
-                "AIE_MODEL=ok",
-                "AIE_API_KEY=sk-parent",
-                "NODE_OPTIONS=--require /evil",
-                "PYTHONSTARTUP=/evil.py",
-            ]
-        )
+        "AIE_MODEL=ok\nAIE_API_KEY=sk-parent\nNODE_OPTIONS=--require /evil\nPYTHONSTARTUP=/evil.py"
         + "\n",
         encoding="utf-8",
     )
@@ -75,15 +60,7 @@ def test_load_env_file_skips_loader_opts_but_keeps_provider_keys(
 def test_load_env_file_export_comments_and_escapes(tmp_path: Path, monkeypatch) -> None:
     path = tmp_path / ".env"
     path.write_text(
-        "\n".join(
-            [
-                "export AIE_API_KEY=sk-from-export",
-                "AIE_MODEL=gpt-4o-mini # comment",
-                'GREETING="hello\\nworld"',
-                "EMPTY=# whole value is a comment",
-                "# ignored",
-            ]
-        )
+        'export AIE_API_KEY=sk-from-export\nAIE_MODEL=gpt-4o-mini # comment\nGREETING="hello\\nworld"\nEMPTY=# whole value is a comment\n# ignored'
         + "\n",
         encoding="utf-8",
     )

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -78,12 +77,12 @@ def build_runtime(
 
 @app.callback(invoke_without_command=True)
 def main(
-    prompt: Optional[str] = typer.Argument(
+    prompt: str | None = typer.Argument(
         None,
         help="One-shot prompt. Omit to enter the interactive REPL.",
     ),
     workspace: Path = typer.Option(
-        Path.cwd(),
+        Path("."),
         "--workspace",
         "-w",
         exists=True,

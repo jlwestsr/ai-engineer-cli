@@ -8,7 +8,8 @@
    uv run pytest -q
    ```
    ```bash
-   uv run --with ruff ruff check --select E9,F63,F7,F82 src tests
+   uv run --with ruff==0.17.5 ruff check src tests
+   uv run --with ruff==0.17.5 ruff format --check src tests
    ```
 4. Merge back into `develop` with `git merge --no-ff` (or `git merge --squash` for a single clean commit), then delete the branch.
 5. `main` is the release branch. Do not commit to it directly.

@@ -12,8 +12,9 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ai_engineer.tools.registry import ToolRegistry
@@ -571,10 +572,10 @@ class WorkspaceTools:
             status = entry[:2]
             path_text = entry[3:]
             repo_paths = [path_text]
-            if status[0] in {"R", "C"} or status[1] in {"R", "C"}:
-                if index < len(entries) and entries[index]:
-                    repo_paths.append(entries[index])
-                    index += 1
+            is_rename = status[0] in {"R", "C"} or status[1] in {"R", "C"}
+            if is_rename and index < len(entries) and entries[index]:
+                repo_paths.append(entries[index])
+                index += 1
             mapped: list[str] = []
             for name in repo_paths:
                 workspace_name = self._workspace_git_path(name, prefix=prefix)

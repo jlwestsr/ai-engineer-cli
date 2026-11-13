@@ -38,12 +38,13 @@ Python 3.12+, managed with [uv](https://docs.astral.sh/uv/) (`uv.lock` is commit
 ```bash
 uv sync --extra dev        # install into .venv
 uv run pytest -q           # tests
-uv run --with ruff ruff check --select E9,F63,F7,F82 src tests   # lint
+uv run --with ruff==0.17.5 ruff check src tests          # lint
+uv run --with ruff==0.17.5 ruff format --check src tests # format check
 uv run aie --help          # run the CLI
 pre-commit run --all-files # hooks
 ```
 
-- CI: `.github/workflows/ci.yml` runs ruff (syntax and undefined-name checks only, for now) and pytest on pushes and PRs to `develop` and `main`.
+- CI: `.github/workflows/ci.yml` runs `ruff check`, `ruff format --check` (ruff pinned to 0.17.5, config in `pyproject.toml`), and pytest on pushes and PRs to `develop` and `main`.
 - Configuration comes from `.env` (see `.env.example`). Name variables only; never print their values.
 
 ## Git workflow

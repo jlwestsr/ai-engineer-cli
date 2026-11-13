@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from ai_engineer.budget import Budget
 from ai_engineer.instructions import build_system_message, load_skill_snippets
@@ -228,7 +229,7 @@ class AgentLoop:
             self._backfill_pending_tool_results(error)
             self._assert_transcript_invariants()
             return
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - recovery must never raise
             pass
         # Last resort: drop trailing incomplete assistant/tool tail.
         try:
@@ -242,7 +243,7 @@ class AgentLoop:
                     continue
                 break
             self._assert_transcript_invariants()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110 - last-resort repair must never raise
             pass
 
     def _evict_old_messages(self) -> None:
@@ -492,7 +493,7 @@ class AgentLoop:
                 self._compact_messages()
                 self._evict_old_messages()
                 return self._wrap_up(status="blocked")
-            except Exception as wrap_error:
+            except Exception as wrap_error:  # noqa: BLE001 - wrap-up is best effort
                 if self.session is not None:
                     self.session.write(
                         {
@@ -509,7 +510,7 @@ class AgentLoop:
             if not self.messages or self.messages[-1].get("role") != "assistant":
                 self.messages.append({"role": "assistant", "content": answer})
             return RunResult(answer=answer, status="blocked", budget=self.budget.snapshot())
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - surface any failure as a failed turn
             self._safe_backfill_pending_tool_results(f"Turn failed: {error}")
             answer = f"Provider or tool failure: {error}"
             if self.session is not None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Self
 from urllib.request import Request
 
 from ai_engineer.provider import OpenAICompatibleProvider
@@ -18,7 +18,7 @@ def test_empty_tools_omits_tool_fields(monkeypatch: Any) -> None:
                 {"choices": [{"message": {"content": "ok", "tool_calls": []}}]}
             ).encode()
 
-        def __enter__(self) -> FakeResponse:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *_args: object) -> None:
@@ -45,7 +45,7 @@ def test_nonempty_tools_include_tool_choice(monkeypatch: Any) -> None:
                 {"choices": [{"message": {"content": "ok", "tool_calls": []}}]}
             ).encode()
 
-        def __enter__(self) -> FakeResponse:
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *_args: object) -> None:

@@ -149,15 +149,8 @@ def test_git_status_filters_secret_paths(tmp_path: Path, monkeypatch: pytest.Mon
             }
         assert "--porcelain" in arguments
         assert "-z" in arguments
-        payload = "\0".join(
-            [
-                "?? .env",
-                "?? notes.txt",
-                " M src/ok.py",
-                "?? id_rsa",
-                "?? .aie/sessions/abc.jsonl",
-                "",
-            ]
+        payload = (
+            "?? .env\x00?? notes.txt\x00 M src/ok.py\x00?? id_rsa\x00?? .aie/sessions/abc.jsonl\x00"
         )
         return {
             "exit_code": 0,
@@ -193,14 +186,7 @@ def test_git_status_maps_nested_workspace_prefix(
                 "truncated": False,
                 "output": str(repo),
             }
-        payload = "\0".join(
-            [
-                "?? pkg/app/notes.txt",
-                "?? pkg/app/.env",
-                "?? other/out.txt",
-                "",
-            ]
-        )
+        payload = "?? pkg/app/notes.txt\x00?? pkg/app/.env\x00?? other/out.txt\x00"
         return {
             "exit_code": 0,
             "timed_out": False,

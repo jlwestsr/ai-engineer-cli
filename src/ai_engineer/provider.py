@@ -163,10 +163,10 @@ class OpenAICompatibleProvider:
         try:
             message = result["choices"][0]["message"]
             if not isinstance(message, dict):
-                raise ValueError("Expected a message object")
+                raise TypeError("Expected a message object")
             raw_calls = message.get("tool_calls") or []
             if not isinstance(raw_calls, list):
-                raise ValueError("Expected a tool_calls list")
+                raise TypeError("Expected a tool_calls list")
             calls = [
                 ToolCall(
                     id=call["id"],

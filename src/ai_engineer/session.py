@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, TextIO
+from typing import Any, Self, TextIO
 from uuid import uuid4
 
 
@@ -38,7 +38,7 @@ class SessionStore:
             }
         )
 
-    def __enter__(self) -> SessionStore:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(
@@ -53,7 +53,7 @@ class SessionStore:
         if self._closed:
             return
         payload = {
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "ts": datetime.now(UTC).isoformat(timespec="seconds"),
             **event,
         }
         self._file.write(json.dumps(payload, ensure_ascii=False) + "\n")
@@ -68,7 +68,7 @@ class SessionStore:
                 self._file.write(
                     json.dumps(
                         {
-                            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                            "ts": datetime.now(UTC).isoformat(timespec="seconds"),
                             "type": "session_end",
                             "session_id": self.session_id,
                         },

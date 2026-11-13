@@ -58,9 +58,7 @@ def is_secret_env_key(name: str) -> bool:
         return True
     if any(marker in upper for marker in SECRET_MARKERS):
         return True
-    if upper.endswith("_KEY") or "_KEY_" in upper:
-        return True
-    return False
+    return upper.endswith("_KEY") or "_KEY_" in upper
 
 
 def is_denied_env_key(name: str, *, for_envfile: bool = False) -> bool:

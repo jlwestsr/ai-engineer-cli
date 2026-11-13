@@ -1,0 +1,5 @@
+# Bulk formatting commits to skip in `git blame`.
+# Enable locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: apply formatter (ruff format 0.17.5)
+e27dcbdead2d6e80d98da4620b8fe692f1ec3768
