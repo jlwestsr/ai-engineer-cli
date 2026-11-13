@@ -99,9 +99,7 @@ def main(
         help="Provider: mock | openai | openrouter",
     ),
     allow_edits: bool = typer.Option(False, "--allow-edits", help="Permit edit_file/create_file."),
-    allow_tests: bool = typer.Option(
-        False, "--allow-tests", help="Permit run_python_tests."
-    ),
+    allow_tests: bool = typer.Option(False, "--allow-tests", help="Permit run_python_tests."),
     max_steps: int = typer.Option(
         None,
         "--max-steps",
@@ -140,9 +138,7 @@ def main(
     try:
         steps = max_steps if max_steps is not None else _env_int("AIE_MAX_STEPS", 5)
         tool_budget = (
-            max_tool_calls
-            if max_tool_calls is not None
-            else _env_int("AIE_MAX_TOOL_CALLS", 10)
+            max_tool_calls if max_tool_calls is not None else _env_int("AIE_MAX_TOOL_CALLS", 10)
         )
         tools_per_turn = (
             max_tools_per_turn

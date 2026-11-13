@@ -62,9 +62,7 @@ def scrub_subprocess_env(environment: dict[str, str]) -> dict[str, str]:
     return cleaned
 
 
-def object_schema(
-    properties: dict[str, Any], required: tuple[str, ...] = ()
-) -> dict[str, Any]:
+def object_schema(properties: dict[str, Any], required: tuple[str, ...] = ()) -> dict[str, Any]:
     return {
         "type": "object",
         "properties": properties,
@@ -160,7 +158,9 @@ class WorkspaceTools:
             raise ValueError("Binary files are not supported")
         return path, data, data.decode("utf-8")
 
-    def set_permissions(self, *, allow_edits: bool | None = None, allow_tests: bool | None = None) -> None:
+    def set_permissions(
+        self, *, allow_edits: bool | None = None, allow_tests: bool | None = None
+    ) -> None:
         if allow_edits is not None:
             self.allow_edits = allow_edits
         if allow_tests is not None:
@@ -336,9 +336,7 @@ class WorkspaceTools:
         path, data, text = self._text(arguments["path"])
         lines = text.splitlines()
         content = "\n".join(
-            f"{number}: {line}"
-            for number, line in enumerate(lines, 1)
-            if start <= number <= end
+            f"{number}: {line}" for number, line in enumerate(lines, 1) if start <= number <= end
         )
         char_truncated = len(content) > MAX_OUTPUT_CHARS
         return {

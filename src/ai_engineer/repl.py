@@ -70,8 +70,7 @@ def run_repl(
             result = loop.run_turn(line)
         except KeyboardInterrupt:
             console.print(
-                "\n[yellow]interrupted[/yellow] — tools stopped. "
-                "Continue, or run /clear."
+                "\n[yellow]interrupted[/yellow] — tools stopped. Continue, or run /clear."
             )
             continue
         if result.status == "done":

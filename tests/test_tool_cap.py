@@ -26,12 +26,7 @@ class BatchyProvider:
             # After any tool round, finish.
             if self.calls >= 2:
                 return ModelResponse("Reviewed with capped tools.")
-        return ModelResponse(
-            tool_calls=[
-                ToolCall(f"id-{i}", "list_files", {})
-                for i in range(10)
-            ]
-        )
+        return ModelResponse(tool_calls=[ToolCall(f"id-{i}", "list_files", {}) for i in range(10)])
 
 
 def test_defers_extra_tools_without_blocking(tmp_path: Path) -> None:

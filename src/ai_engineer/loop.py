@@ -196,7 +196,11 @@ class AgentLoop:
             rebuilt.extend(group)
             head = group[0]
             tool_calls = head.get("tool_calls")
-            if head.get("role") != "assistant" or not isinstance(tool_calls, list) or not tool_calls:
+            if (
+                head.get("role") != "assistant"
+                or not isinstance(tool_calls, list)
+                or not tool_calls
+            ):
                 continue
             answered = {
                 message.get("tool_call_id")

@@ -84,12 +84,8 @@ class MockProvider:
         if engineering is not None:
             name, arguments = engineering
             if name not in available:
-                return ModelResponse(
-                    f"{name} is unavailable; its permission may not be enabled."
-                )
-            return ModelResponse(
-                tool_calls=[ToolCall("mock-engineering", name, arguments)]
-            )
+                return ModelResponse(f"{name} is unavailable; its permission may not be enabled.")
+            return ModelResponse(tool_calls=[ToolCall("mock-engineering", name, arguments)])
         if "time" in lowered and "get_current_time" in available:
             return ModelResponse(tool_calls=[ToolCall("mock-time", "get_current_time", {})])
         match = re.search(
@@ -221,12 +217,12 @@ def build_provider(name: str) -> Provider:
     if name == "openrouter":
         api_key = _first_env("AIE_API_KEY", "OPENROUTER_API_KEY")
         if not api_key:
-            raise RuntimeError(
-                "Set OPENROUTER_API_KEY (or AIE_API_KEY) for --provider openrouter"
-            )
+            raise RuntimeError("Set OPENROUTER_API_KEY (or AIE_API_KEY) for --provider openrouter")
         base_url = os.environ.get("AIE_BASE_URL", "https://openrouter.ai/api/v1")
         model = os.environ.get("AIE_MODEL", "deepseek/deepseek-v4-pro")
-        referer = os.environ.get("AIE_HTTP_REFERER", "https://github.com/westailabs/ai-engineer-cli")
+        referer = os.environ.get(
+            "AIE_HTTP_REFERER", "https://github.com/westailabs/ai-engineer-cli"
+        )
         title = os.environ.get("AIE_APP_TITLE", "AI Engineer CLI")
         return OpenAICompatibleProvider(
             base_url,

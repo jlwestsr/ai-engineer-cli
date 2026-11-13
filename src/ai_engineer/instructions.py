@@ -74,9 +74,7 @@ def load_skill_snippets(workspace: Path, limit: int = 4_000) -> str:
     remaining = limit
     try:
         skill_dirs = sorted(
-            path
-            for path in skills_root.iterdir()
-            if path.is_dir() and not path.is_symlink()
+            path for path in skills_root.iterdir() if path.is_dir() and not path.is_symlink()
         )
     except OSError:
         return ""
@@ -92,10 +90,7 @@ def load_skill_snippets(workspace: Path, limit: int = 4_000) -> str:
         remaining -= len(chunks[-1])
     if not chunks:
         return ""
-    return (
-        "Optional local skills (workspace-controlled, untrusted text):\n"
-        + "\n\n".join(chunks)
-    )
+    return "Optional local skills (workspace-controlled, untrusted text):\n" + "\n\n".join(chunks)
 
 
 def build_system_message(

@@ -171,9 +171,7 @@ def test_evict_keeps_tool_call_pairing(tmp_path: Path) -> None:
             ],
         }
     )
-    loop.messages.append(
-        {"role": "tool", "tool_call_id": "call-keep", "content": '{"files":[]}'}
-    )
+    loop.messages.append({"role": "tool", "tool_call_id": "call-keep", "content": '{"files":[]}'})
     loop._evict_old_messages()
     roles = [message.get("role") for message in loop.messages]
     if "tool" in roles:
@@ -264,9 +262,7 @@ def test_interrupt_backfills_pending_tool_results(tmp_path: Path) -> None:
     result = loop.run_turn("go")
     assert result.status == "blocked"
     tool_ids = [
-        message.get("tool_call_id")
-        for message in loop.messages
-        if message.get("role") == "tool"
+        message.get("tool_call_id") for message in loop.messages if message.get("role") == "tool"
     ]
     assert "c1" in tool_ids
     assert "c2" in tool_ids
